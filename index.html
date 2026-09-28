@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ujian Online Anti-Cheat</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1, h2 { text-align: center; color: #1a73e8; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"] { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+        .btn { width: 100%; background: #1a73e8; color: white; padding: 14px; border: none; border-radius: 6px; font-size: 18px; font-weight: bold; cursor: pointer; transition: background 0.2s; margin-top: 10px; }
+        .btn:hover { background: #1557b0; }
+        .btn:disabled { background: #cccccc; cursor: not-allowed; }
+        .soal-card { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+        .soal-header { font-weight: bold; color: #555; margin-bottom: 10px; display: flex; justify-content: space-between; }
+        .pilihan-label { display: block; padding: 10px; background: white; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 8px; cursor: pointer; transition: 0.2s; }
+        .pilihan-label:hover { background: #eef5ff; }
+        .pilihan-label input { margin-right: 10px; }
+        #warning-bar { display: none; position: fixed; top: 0; left: 0; right: 0; background: #d93025; color: white; text-align: center; padding: 12px; font-weight: bold; z-index: 9999; }
+        .hidden { display: none !important; }
+        .info-box { background: #e8f0fe; border-left: 5px solid #1a73e8; padding: 15px; margin-bottom: 20px; border-radius: 4px; }
+        .status-loading { background: #fff3cd; color: #856404; padding: 10px; border-radius: 5px; margin-top: 10px; font-weight: bold; }
+    </style>
+</head>
+<body oncontextmenu="return false;" oncopy="return false;" oncut="return false;" onpaste="return false;">
+
+    <div id="warning-bar">DILARANG BERALIH APLIKASI / TAB! PELANGGARAN TERDETEKSI: <span id="violation-count">0</span>/3</div>
+
+    <div class="container">
+        <!-- HALAMAN LOGIN / IDENTITAS -->
+        <div id="login-page">
+            <h1>Ujian Online Lembar Kerja</h1>
+            <div class="info-box">
+                <p><strong>Aturan Ujian Anti-Cheat:</strong></p>
+                <ul>
+                    <li>Ujian akan berjalan dalam mode Layar Penuh (Fullscreen).</li>
+                    <li>Dilarang berpindah aplikasi, meminimalkan browser, atau membuka tab lain.</li>
+                    <li>Maksimal pelanggaran adalah 3 kali. Jika dilanggar, jawaban akan <strong>otomatis dikirim</strong>.</li>
+                </ul>
+            </div>
+            <form id="form-login" onsubmit="mulaiUjian(event)">
+                <div class="form-group">
+                    <label for="nama">Nama Lengkap:</label>
+                    <input type="text" id="nama" required placeholder="Masukkan Nama Lengkap">
+                </div>
+                <div class="form-group">
+                    <label for="kelas">Kelas:</label>
+                    <input type="text" id="kelas" required placeholder="Contoh: 8A / 8B">
+                </div>
+                <button type="submit" class="btn">Mulai Ujian</button>
+            </form>
+        </div>
+
+        <!-- HALAMAN UJIAN -->
+        <div id="exam-page" class="hidden">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <span id="user-info" style="font-weight: bold; font-size: 16px;"></span>
+                <span id="timer" style="font-weight: bold; color: #d93025; font-size: 18px;"></span>
+            </div>
+            <hr style="margin-bottom: 20px; border: 0; border-top: 1px solid #ccc;">
+
+            <div id="soal-container"></div>
+
+            <button onclick="konfirmasiSelesai()" id="btn-submit" class="btn" style="background: #34a853;">Kirim Jawaban</button>
+        </div>
+
+        <!-- HALAMAN SELESAI -->
+        <div id="result-page" class="hidden" style="text-align: center;">
+            <h2>Ujian Selesai!</h2>
+            <div class="info-box" id="result-summary"></div>
+            <div id="sending-status" class="status-loading">Mengirim jawaban ke server... Mohon tunggu.</div>
+            <div id="backup-option" class="hidden" style="margin-top: 15px;">
+                <p style="color: red; font-weight: bold;">Jika pengiriman otomatis gagal/lama karena lalu lintas tinggi, silakan salin teks di bawah ini dan kirim ke Guru:</p>
+                <textarea id="backup-text" style="width:100%; height:100px;" readonly></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL KONFIRMASI SELSEAI -->
+    <div id="modal-konfirmasi" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 10000;">
+        <div style="background: white; padding: 25px; border-radius: 10px; max-width: 400px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
+            <h3 style="margin-top:0;">Konfirmasi Pengiriman</h3>
+            <p>Apakah Anda yakin ingin menyelesaikan dan mengirim jawaban?</p>
+            <p style="font-size: 13px; color: #d93025;">Konfirmasi akan otomatis batal dalam <b id="countdown-confirm">10</b> detik jika tidak merespons.</p>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button onclick="batalSelesai()" class="btn" style="background: #6c757d; margin:0;">Batal</button>
+                <button onclick="submitUjian(false)" class="btn" style="background: #34a853; margin:0;">Ya, Kirim</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // MASUKKAN URL GOOGLE APPS SCRIPT ANDA DI SINI:
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxncpd4rJC6-K7wNw2PAM3yeJFhi79JDg12D-kMQcpA1TdocG-QcHgMgVayoxKn0jk/exec";
+
+        // BANK SOAL
+        const bankSoal = {
+            C1: [
+                { q: "Lembar kerja yang dibuat dan diolah menggunakan perangkat elektronik seperti komputer atau laptop disebut...", a: ["Lembar kerja manual", "Lembar kerja digital", "Lembar kerja kertas", "Lembar kerja tradisional"], k: 1 },
+                { q: "Lembar kerja yang menggunakan media fisik berupa kertas dan alat tulis tangan disebut...", a: ["Lembar kerja digital", "Lembar kerja elektronik", "Lembar kerja kertas", "Lembar kerja aplikasi"], k: 2 },
+                { q: "Apa fungsi utama dari sebuah lembar kerja (worksheet)?", a: ["Tempat bermain game", "Mengorganisir, menghitung, dan menganalisis data", "Mengedit video pendek", "Menyimpan file suara"], k: 1 },
+                { q: "Contoh perangkat lunak aplikasi pengolah angka (lembar kerja digital) yang paling sering digunakan adalah...", a: ["Microsoft Word", "Microsoft Excel", "Google Chrome", "Adobe Photoshop"], k: 1 },
+                { q: "Lembar kerja digital berbentuk tabel yang terdiri dari baris dan kolom disebut sebagai...", a: ["Dokumen teks", "Spreadsheet", "Presentasi", "Basis data"], k: 1 },
+                { q: "Pertemuan antara baris dan kolom pada lembar kerja digital dinamakan...", a: ["Range", "Formula", "Sel (Cell)", "Sheet"], k: 2 },
+                { q: "Kelebihan utama dari lembar kerja digital dibandingkan lembar kerja kertas adalah...", a: ["Easily torn", "Perhitungan dapat dilakukan secara otomatis", "Membutuhkan pensil khusus", "Tidak bisa dihapus"], k: 1 },
+                { q: "Alat tulis utama yang biasa digunakan pada lembar kerja kertas tradisional adalah...", a: ["Mouse dan keyboard", "Printer dan scanner", "Pensil atau pulpen", "Layar sentuh"], k: 2 },
+                { q: "Jika kita salah menulis data pada lembar kerja kertas, tindakan yang biasa dilakukan adalah...", a: ["Mengklik tombol undo", "Menggunakan penghapus atau mencoretnya", "Menekan tombol delete", "Menutup aplikasi"], k: 1 },
+                { q: "Istilah untuk lembar kerja digital yang masih kosong dan siap diisi data adalah...", a: ["Buku catatan", "Kertas folio", "Workbook / Lembar kerja baru", "Arsip lama"], k: 2 },
+                { q: "Manakah di bawah ini yang merupakan ciri khas dari lembar kerja kertas tradisional?", a: ["Memiliki rumus otomatis", "Bersifat fisik dan statis", "Bisa dibagikan lewat internet seketika", "Kapasitas data tidak terbatas"], k: 1 },
+                { q: "Dalam lembar kerja digital, kumpulan dari beberapa sel disebut dengan...", a: ["Kolom", "Baris", "Range", "Tab"], k: 2 },
+                { q: "Proses memasukkan data angka atau teks ke dalam lembar kerja kertas dilakukan secara...", a: ["Manual dengan tangan", "Otomatis menggunakan rumus", "Disalin oleh mesin cetak", "Dipindai dengan AI"], k: 0 },
+                { q: "Apa yang terjadi pada lembar kerja kertas jika terkena air?", a: ["Data terhapus otomatis oleh sistem", "Kertas bisa rusak dan tulisan luntur", "Data tersimpan di awan (cloud)", "Tidak terjadi apa-apa"], k: 1 },
+                { q: "Di bawah ini yang bukan merupakan contoh lembar kerja digital adalah...", a: ["Microsoft Excel", "Google Sheets", "WPS Office Spreadsheets", "Buku tulis bergaris"], k: 3 },
+                { q: "Lembar kerja tradisional sangat bergantung pada...", a: ["Aliran listrik dan baterai", "Sinyal internet yang kuat", "Kondisi fisik kertas dan alat tulis", "Pembaruan software"], k: 2 },
+                { q: "Bagian horizontal (mendatar) pada tabel lembar kerja digital biasanya ditandai dengan...", a: ["Angka (1, 2, 3, ...)", "Huruf (A, B, C, ...)", "Simbol khusus", "Warna-warni"], k: 0 },
+                { q: "Bagian vertikal (tegak) pada tabel lembar kerja digital biasanya ditandai dengan...", a: ["Angka", "Huruf (A, B, C, ...)", "Tanda tanya", "Garis putus-putus"], k: 1 },
+                { q: "Salah satu kelemahan utama lembar kerja kertas dibandingkan digital adalah...", a: ["Sulit dibawa ke mana-mana", "Sulit mencari data lama dalam jumlah ribuan secara cepat", "Terlalu banyak tombol pintas", "Memerlukan keahlian komputer tinggi"], k: 1 },
+                { q: "Pengertian dasar dari lembar kerja (worksheet) secara umum adalah...", a: ["Lembaran yang memuat data/informasi untuk diselesaikan atau dianalisis", "Buku cerita fiksi", "Alat memotret", "Perangkat keras pencetak"], k: 0 }
+            ],
+            C2: [
+                { q: "Mengapa setiap penulisan rumus pada lembar kerja digital harus diawali tanda sama dengan (=)?", a: ["Agar tampilan tebal", "Agar program mengenali sebagai perhitungan matematika", "Agar otomatis tersimpan", "Agar sel berubah warna"], k: 1 },
+                { q: "Dalam lembar kerja digital, simbol yang digunakan untuk perkalian adalah...", a: ["x", ".", "*", ":"], k: 2 },
+                { q: "Jika A1=10 dan B1=5, rumus pembagian A1 oleh B1 yang tepat adalah...", a: ["=A1 : B1", "=A1 / B1", "=A1 x B1", "=A1 \\ B1"], k: 1 },
+                { q: "Penggunaan tanda kurung () pada operasi matematika spreadsheet berfungsi untuk...", a: ["Mempercantik rumus", "Menandakan teks", "Mengatur urutan prioritas eksekusi", "Menghapus data"], k: 2 },
+                { q: "Manakah rumus yang akan menghasilkan nilai 14?", a: ["=2 + 3 * 4", "=(2 + 3) * 4", "=2 * 3 + 4", "=2 + (3 + 4)"], k: 0 },
+                { q: "Perbedaan utama antara rumus =5 + 5 dan =A1 + B1 adalah...", a: ["=5+5 tidak bisa dihitung", "=A1+B1 bersifat dinamis jika isi sel diubah", "=5+5 hanya di kertas", "=A1+B1 hasil selalu tetap"], k: 1 },
+                { q: "Operator matematika untuk operasi pemangkatan (misal 2^3) adalah...", a: ["^", "%", "#", "~"], k: 0 },
+                { q: "Hasil dari rumus =10 - 4 / 2 pada spreadsheet adalah...", a: ["3", "8", "5", "12"], k: 1 },
+                { q: "Untuk menjumlahkan C1 dan C2, lalu hasilnya dikali C3, penulisan rumus yang benar adalah...", a: ["=C1 + C2 * C3", "=(C1 + C2) * C3", "=C1 + (C2 * C3)", "=C1 * C2 + C3"], k: 1 },
+                { q: "Apa yang terjadi jika rumus =A1 + B1 dimasukkan, tetapi A1 berisi kata 'Tiga' dan B1 berisi 5?", a: ["Mengubah otomatis jadi 3", "Menampilkan eror (#VALUE!)", "Mengabaikan kata Tiga", "Komputer mati"], k: 1 },
+                { q: "Urutan hierarki operasi matematika yang benar dari tertinggi ke terendah adalah...", a: ["Tambah/Kurang -> Kali/Bagi -> Pangkat -> Kurung", "Dalam Kurung -> Pangkat -> Kali/Bagi -> Tambah/Kurang", "Kali/Bagi -> Tambah/Kurang -> Kurung -> Pangkat", "Pangkat -> Kurung -> Tambah/Kurang -> Kali/Bagi"], k: 1 },
+                { q: "Jika D2 = 100 dan ditulis rumus =D2 * 10%, hasil yang muncul adalah...", a: ["10", "90", "110", "1000"], k: 0 },
+                { q: "Pernyataan yang paling tepat mengenai keunggulan operasi matematika digital adalah...", a: ["Pasti bebas kesalahan rumus manusia", "Mampu memproses ribuan data secara cepat & akurat jika rumus benar", "Tidak perlu listrik", "Hasil bisa ditebak tanpa mengetik"], k: 1 },
+                { q: "Hasil dari operasi =(12 - 4) / (2 + 2) adalah...", a: ["2", "4", "6", "8"], k: 0 },
+                { q: "Manakah penulisan rumus perkalian antar sel yang eror?", a: ["=B2*C2", "=B2xC2", "=(B2)*(C2)", "= B2 * C2"], k: 1 },
+                { q: "A2=8. Jika B2 diisi rumus =A2^2 - 10, berapa nilai di B2?", a: ["6", "54", "26", "64"], k: 1 },
+                { q: "Mengapa =A1+B1+C1 kurang efisien untuk menjumlahkan puluhan sel (A1:A50)?", a: ["Angka terlalu banyak", "Penulisan terlalu panjang & rentan salah, lebih cocok pakai =SUM", "Komputer lambat", "Simbol + maksimal 3x"], k: 1 },
+                { q: "Jika Anda mengetik 10+5 tanpa tanda = di sel E1, apa yang ditampilkan?", a: ["15", "Eror", "Teks 10+5", "Angka 0"], k: 2 },
+                { q: "Operasi pengurangan pada lembar kerja digital ditunjukkan oleh simbol...", a: ["_", "-", "~", "/"], k: 1 },
+                { q: "Sel A1=4, B1=2, C1=3. Hasil dari =A1 + B1 * C1 adalah...", a: ["18", "10", "14", "24"], k: 1 }
+            ],
+            C3: [
+                { q: "Pak Joko mencatat penjualan beras A1:A5: 25, 30, 20, 40, 35. Rumus total penjualan beras adalah...", a: ["=AVERAGE(A1:A5)", "=SUM(A1:A5)", "=MAX(A1:A5)", "=MIN(A1:A5)"], k: 1 },
+                { q: "Pemilik Bengkel Jaya ingin tahu harga sparepart paling murah di C2:C20. Rumusnya adalah...", a: ["=MIN(C2:C20)", "=MAX(C2:C20)", "=SMALLER(C2:C20)", "=LOW(C2:C20)"], k: 0 },
+                { q: "Bu Siti mencatat pendapatan harian B2:B8. Untuk tahu rata-rata pendapatan per hari rumusnya...", a: ["=SUM(B2:B8)/8", "=AVERAGE(B2:B8)", "=MEAN(B2:B8)", "=COUNT(B2:B8)"], k: 1 },
+                { q: "Bengkel Motor mencatat servis harian D2:D15. Untuk mengetahui servis terbanyak sehari rumusnya...", a: ["=HIGHEST(D2:D15)", "=SUM(D2:D15)", "=MAX(D2:D15)", "=TOP(D2:D15)"], k: 2 },
+                { q: "Warung Es: E1:E4 berisi 10, 20, 30, 40. Jika ditulis =AVERAGE(E1:E4), hasilnya adalah...", a: ["100", "25", "10", "40"], k: 1 },
+                { q: "Pak Roni mengelola toko di buku kertas. Masalah perubahan harga grosir lebih cepat selesai di spreadsheet karena...", a: ["Spreadsheet otomatis mengupdate total saat harga diubah", "Tanpa listrik", "Kertas tak bisa tulis angka besar", "Tulisan tangan otomatis ke komputer"], k: 0 },
+                { q: "A1:A3 berisi 50, 100, 150. Hasil dari =SUM(A1:A3) - MIN(A1:A3) adalah...", a: ["250", "300", "200", "150"], k: 0 },
+                { q: "Mekanik di area terbuka tanpa listrik memilih rekap kertas karena...", a: ["Kertas menghitung otomatis", "Kertas mudah digunakan langsung tanpa baterai/listrik", "Kertas menyimpan jutaan data", "Kertas tahan oli"], k: 1 },
+                { q: "Stok oli B1=70, B2=80, B3=90. Hasil dari =MAX(B1:B3) + AVERAGE(B1:B3) adalah...", a: ["170", "240", "150", "160"], k: 0 },
+                { q: "Pemilik Toko dengan 2.000 jenis barang ingin rekap otomatis & cepat. Media terbaik adalah...", a: ["Buku tulis bergaris", "Lembar kerja digital (spreadsheet)", "Nota kertas", "Papan tulis"], k: 1 },
+                { q: "Stok mangkok C1=5, C2=15, C3=10. Rumus yang menghasilkan nilai terbesar adalah...", a: ["=MIN(C1:C3) * 2", "=AVERAGE(C1:C3)", "=MAX(C1:C3)", "=SUM(C1:C3)"], k: 3 },
+                { q: "Data A1:A4: 4, 8, 12, 16. Hasil dari =(SUM(A1:A4) / 2) - MAX(A1:A4) adalah...", a: ["4", "8", "20", "10"], k: 0 },
+                { q: "Kasir keliru mengetik =SUM(B2:B10) bukannya =AVERAGE(B2:B10) untuk mencari rata-rata. Akibatnya...", a: ["Angka muncul sangat besar karena total penjumlahan", "Pesan eror #ERROR!", "Muncul harga termurah", "Tidak ada pengaruh"], k: 0 },
+                { q: "Memindahkan rekap nota kertas 3 tahun lalu ke laptop dinamakan...", a: ["Menyimpan di lemari besi", "Memindahkan data dari lembar kerja kertas ke digital", "Memfotokopi", "Menulis di karton"], k: 1 },
+                { q: "Penjualan gas D1=10, D2=0, D3=20. Hasil dari =AVERAGE(D1:D3) adalah...", a: ["15", "10", "30", "0"], k: 1 },
+                { q: "Hasil dari =MIN(10, 25, 5, 40) + MAX(5, 10, 15) adalah...", a: ["20", "30", "50", "15"], k: 0 },
+                { q: "Data B1:B5: 15, 25, 20, 30, 10. Rumus =MAX(B1:B5) - MIN(B1:B5) berguna untuk...", a: ["Rata-rata transaksi", "Selisih transaksi terbanyak dan tersedikit", "Total transaksi", "Jumlah hari buka"], k: 1 },
+                { q: "Ani mencatat di kertas, Budi di Google Sheets. Saat terjadi salah ketik harga, keuntungan Budi adalah...", a: ["Budi bisa mengedit harga & total berubah otomatis tanpa tipeks", "Budi harus beli laptop baru", "Ani bisa hapus pakai penghapus", "Budi tak bisa ubah angka"], k: 0 },
+                { q: "Stok telur A1=2, A2=4, A3=6, A4=8. Rumus yang menghasilkan nilai 5 adalah...", a: ["=AVERAGE(A1:A4)", "=MAX(A1:A4) - MIN(A1:A4)", "=SUM(A1:A4)", "=SUM(A1:A2) - MIN(A1:A4)"], k: 0 },
+                { q: "Penggunaan spreadsheet sangat disarankan untuk bengkel dengan banyak stok karena...", a: ["Perhitungan otomatis & mudah cari data dibanding buka kertas satu per satu", "Tak butuh elektronik", "Mencegah oli menetes", "Tak perlu hitung kembalian"], k: 0 }
+            ],
+            C4: [
+                { q: "Data A1=50, A2=0, A3=100, A4=(kosong), A5=50. Bagaimana spreadsheet memproses =AVERAGE(A1:A5)?", a: ["A2 & A4 dianggap 0 (dibagi 5)", "A2 dianggap 0, A4 diabaikan dari pembagi (dibagi 4)", "A2 & A4 diabaikan", "Eror #DIV/0!"], k: 1 },
+                { q: "B1(Modal)=150k, B2(Kotor)=350k, B3(Operasional)=50k. Keliru mengetik =B2-(B1-B3) padahal seharusnya =B2-B1-B3. Dampaknya...", a: ["Keuntungan tercatat lebih rendah 100k", "Keuntungan tercatat lebih tinggi 100k dari yang seharusnya", "Hasil tetap sama", "Eror #VALUE!"], k: 1 },
+                { q: "Mengapa revisi 1 harga item di pertengahan bulan menyebabkan salah hitung pada kertas tapi TIDAK pada spreadsheet?", a: ["Kertas tak bisa catat >100rb", "Kertas bersifat statis (manual), spreadsheet memiliki relasi sel dinamis yang otomatis memperbarui hasil", "Spreadsheet mengoreksi typo otomatis", "Kertas tak bisa catat bertahap"], k: 1 },
+                { q: "Stok ban C1=20, C2=35, C3=15, C4=30. Untuk mencari selisih ban terbanyak dengan rata-rata stok, rumusnya...", a: ["=MAX(C1:C4) - AVERAGE(C1:C4)", "=SUM(C1:C4) - MIN(C1:C4)", "=LARGE(C1:C4) / AVERAGE(C1:C4)", "=MAX(C1:C4) - SUM(C1:C4)"], k: 0 },
+                { q: "Mengetik =50000 + 20000 * 2 di spreadsheet menghasilkan 90000 (harapan pengguna 140000). Penyebabnya...", a: ["Kerusakan sistem", "Spreadsheet mendahulukan operasi perkalian sesuai hierarki matematika", "50000 dianggap teks", "Tanda = tidak berfungsi"], k: 1 },
+                { q: "B2:B12 berisi data penjualan. B7=0 karena stok kosong. Jika digunakan =MIN(B2:B12), dampaknya pada analisis toko adalah...", a: ["Informasi tepat", "Informasi menyesatkan (stok kosong terdeteksi paling tidak laku)", "Rumus =MIN mengabaikan 0", "Menghasilkan rata-rata"], k: 1 },
+                { q: "Analisis perbandingan Rumus X: =SUM(A1:A7)/7 dan Rumus Y: =AVERAGE(A1:A7) pada data yang sama...", a: ["X lebih besar dari Y", "Y lebih besar dari X", "Kedua rumus menghasilkan nilai sama persis", "Rumus X eror karena /"], k: 2 },
+                { q: "Menghitung total biaya E2:E10 setelah diskon 10% untuk seluruh item. Rumus paling ringkas adalah...", a: ["=SUM(E2:E10) - 10%", "=SUM(E2:E10) * 0.9", "=AVERAGE(E2:E10) * 10%", "=SUM(E2:E10) / 10"], k: 1 },
+                { q: "A1:A5 = 2,3,1,4,0. B1:B5 = 10,50,20,5,30. Berapa hasil dari =SUM(A1:A5)*MAX(B1:B5)?", a: ["500", "100", "250", "50"], k: 0 },
+                { q: "Skenario A: Warung Tenda tanpa listrik saat hujan. Skenario B: Toko Grosir 1.500 transaksi/hari. Rekomendasi media...", a: ["A Pakai Spreadsheet; B Pakai Kertas", "A Pakai Kertas; B Pakai Spreadsheet Digital", "Kedua Pakai Kertas", "Kedua Pakai Spreadsheet"], k: 1 },
+                { q: "A1=10, B1='20' (teks). Mengapa =SUM(A1:B1) menghasilkan 10 pada spreadsheet?", a: ["Fungsi SUM otomatis mengabaikan teks di dalam range", "20 jadi negatif", "B1 dianggap nol", "Kegagalan sistem"], k: 0 },
+                { q: "Mengapa =A1+B1 eror #VALUE! pada A1=10, B1='20' (teks), sedangkan =SUM(A1:B1) berhasil?", a: ["Operator + wajib numerik murni, sedangkan SUM mengabaikan teks dalam range", "Operator + tidak bisa membaca baris 1", "SUM hanya untuk >100", "Tidak ada perbedaan"], k: 0 },
+                { q: "B2:B6 berisi pendapatan 5 hari. Struktur rumus untuk mengetahui selisih tertinggi dan terendah adalah...", a: ["=MAX(B2:B6) - MIN(B2:B6)", "=MAX(B2:B6) / MIN(B2:B6)", "=SUM(B2:B6) - AVERAGE(B2:B6)", "=HIGH(B2:B6) - LOW(B2:B6)"], k: 0 },
+                { q: "C2=50k, C3=75k, C4=0, C5=100k, C6=125k. Jika C4 dihapus (menjadi blank/kosong, bukan 0), nilai =AVERAGE(C2:C6)...", a: ["Menjadi lebih besar karena pembagi berkurang dari 5 menjadi 4", "Menjadi lebih kecil", "Tetap sama", "Eror #N/A"], k: 0 },
+                { q: "Total makanan A1:A5, total minuman B1:B5, dikurangi kupon C1. Rumus tunggal yang tepat...", a: ["=SUM(A1:A5) + SUM(B1:B5) - C1", "=SUM(A1:A5 : B1:B5) - C1", "=SUM(A1:A5 + B1:B5) * C1", "=AVERAGE(A1:B5) - C1"], k: 0 },
+                { q: "Listrik padam mendadak tanpa UPS. Risiko kehilangan data di spreadsheet terjadi karena...", a: ["Kertas menyalin ke memori lain", "Data disimpan sementara di RAM sebelum disimpan permanen ke disk", "Kertas tak bisa terbakar", "Komputer menghapus file lama"], k: 1 },
+                { q: "Hasil dari = (MAX(10, 20, 30) * MIN(2, 4, 6)) / AVERAGE(5, 10, 15) adalah...", a: ["6", "12", "60", "3"], k: 0 },
+                { q: "Rumus =SUM(D2:D10)/COUNT(D2:D10) memiliki fungsi yang ekivalen dengan...", a: ["=MAX(D2:D10)", "=MIN(D2:D10)", "=AVERAGE(D2:D10)", "=SUMIF(D2:D10)"], k: 2 },
+                { q: "Hasil =MAX(B2:B10) - MIN(B2:B10) di warung jus adalah 7000. Makna angka 7000 ini adalah...", a: ["Rata-rata harga jus Rp7.000", "Selisih harga jus termahal dan termurah Rp7.000", "Total harga Rp7.000", "Jus termurah Rp7.000"], k: 1 },
+                { q: "Jika pengguna tidak memasukkan tanda = di awal SUM(A1:A10), dampaknya adalah...", a: ["Hasil normal", "Sistem menganggap sebagai Teks Biasa (String), tidak ada kalkulasi", "Otomatis ditambah tanda =", "Sel kosong"], k: 1 }
+            ]
+        };
+
+        let selectedQuestions = [];
+        let userAnswers = {};
+        let violations = 0;
+        let isExamActive = false;
+        let userData = { nama: '', kelas: '' };
+        let wakeLock = null;
+        let waktuKeluar = 0;
+
+        let confirmTimer = null;
+        let confirmCountdownInterval = null;
+
+        function shuffle(array) {
+            return array.sort(() => Math.random() - 0.5);
+        }
+
+        function getRandomQuestions(category, count) {
+            let shuffled = shuffle([...bankSoal[category]]);
+            return shuffled.slice(0, count).map(q => ({ ...q, level: category }));
+        }
+
+        function tanganiHalamanDisembunyikan() {
+            if (!isExamActive) return;
+            if (waktuKeluar === 0) {
+                waktuKeluar = Date.now();
+            }
+        }
+
+        async function tanganiHalamanKembali(alasan) {
+            if (!isExamActive) return;
+
+            await tahanLayarMenyala();
+            masukFullscreen();
+
+            if (waktuKeluar > 0) {
+                const durasiDiLuar = (Date.now() - waktuKeluar) / 1000;
+                waktuKeluar = 0;
+
+                if (durasiDiLuar >= 3) {
+                    catatPelanggaran(`${alasan} (Durasi: ${Math.round(durasiDiLuar)} detik)`);
+                }
+            }
+        }
+
+        async function tahanLayarMenyala() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) {
+                console.warn(`Wake Lock Gagal: ${err.name}`);
+            }
+        }
+
+        function masukFullscreen() {
+            let elem = document.documentElement;
+            if (!document.fullscreenElement) {
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(() => {});
+                } else if (elem.webkitRequestFullscreen) {
+                    elem.webkitRequestFullscreen();
+                } else if (elem.msRequestFullscreen) {
+                    elem.msRequestFullscreen();
+                }
+            }
+        }
+
+        function mulaiUjian(e) {
+            e.preventDefault();
+            userData.nama = document.getElementById('nama').value.trim();
+            userData.kelas = document.getElementById('kelas').value.trim();
+
+            if(!userData.nama || !userData.kelas) return alert("Isi Nama dan Kelas!");
+
+            masukFullscreen();
+            tahanLayarMenyala();
+
+            const savedState = localStorage.getItem(`ujian_${userData.nama}_${userData.kelas}`);
+            if (savedState) {
+                const parsed = JSON.parse(savedState);
+                selectedQuestions = parsed.selectedQuestions;
+                userAnswers = parsed.userAnswers || {};
+                violations = parsed.violations || 0;
+            } else {
+                selectedQuestions = shuffle([
+                    ...getRandomQuestions('C1', 5),
+                    ...getRandomQuestions('C2', 5),
+                    ...getRandomQuestions('C3', 8),
+                    ...getRandomQuestions('C4', 2)
+                ]);
+                simpanProgressLokal();
+            }
+
+            renderSoal();
+
+            document.getElementById('login-page').classList.add('hidden');
+            document.getElementById('exam-page').classList.remove('hidden');
+            document.getElementById('user-info').innerText = `${userData.nama} (${userData.kelas})`;
+
+            isExamActive = true;
+        }
+
+        function simpanProgressLokal() {
+            localStorage.setItem(`ujian_${userData.nama}_${userData.kelas}`, JSON.stringify({
+                selectedQuestions,
+                userAnswers,
+                violations
+            }));
+        }
+
+        function renderSoal() {
+            let html = '';
+            selectedQuestions.forEach((q, idx) => {
+                const checked = (optIdx) => userAnswers[idx] === optIdx ? 'checked' : '';
+                html += `
+                <div class="soal-card">
+                    <div class="soal-header">
+                        <span>Soal No. ${idx + 1} [Level ${q.level}]</span>
+                    </div>
+                    <p style="font-size: 16px; font-weight: 500;">${q.q}</p>
+                    <div>
+                        ${q.a.map((opt, optIdx) => `
+                            <label class="pilihan-label">
+                                <input type="radio" name="soal_${idx}" value="${optIdx}" ${checked(optIdx)} onchange="simpanJawaban(${idx},${optIdx})">
+                                ${String.fromCharCode(65 + optIdx)}.${opt}
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>`;
+            });
+            document.getElementById('soal-container').innerHTML = html;
+        }
+
+        function simpanJawaban(soalIdx, optIdx) {
+            userAnswers[soalIdx] = optIdx;
+            simpanProgressLokal();
+        }
+
+        document.addEventListener("visibilitychange", function() {
+            if (document.visibilityState === "hidden") {
+                tanganiHalamanDisembunyikan();
+            } else if (document.visibilityState === "visible") {
+                tanganiHalamanKembali("Beralih Tab / Aplikasi");
+            }
+        });
+
+        document.addEventListener("fullscreenchange", function() {
+            if (!isExamActive) return;
+
+            if (!document.fullscreenElement) {
+                tanganiHalamanDisembunyikan();
+            } else {
+                tanganiHalamanKembali("Keluar Mode Fullscreen");
+            }
+        });
+
+        function catatPelanggaran(alasan) {
+            violations++;
+            simpanProgressLokal();
+            document.getElementById('warning-bar').style.display = 'block';
+            document.getElementById('violation-count').innerText = violations;
+
+            alert(`PERINGATAN CHEAT! (${violations}/3)\nTerdeteksi: ${alasan}.\nJangan meninggalkan halaman ujian!`);
+
+            if (violations >= 3) {
+                alert("Batas pelanggaran terlampaui! Ujian Anda otomatis dikirim.");
+                submitUjian(true);
+            }
+        }
+
+        function konfirmasiSelesai() {
+            const modal = document.getElementById('modal-konfirmasi');
+            modal.classList.remove('hidden');
+
+            let sisaWaktu = 10;
+            const countdownElem = document.getElementById('countdown-confirm');
+            countdownElem.innerText = sisaWaktu;
+
+            clearInterval(confirmCountdownInterval);
+            clearTimeout(confirmTimer);
+
+            confirmCountdownInterval = setInterval(() => {
+                sisaWaktu--;
+                countdownElem.innerText = sisaWaktu;
+                if (sisaWaktu <= 0) {
+                    clearInterval(confirmCountdownInterval);
+                }
+            }, 1000);
+
+            confirmTimer = setTimeout(() => {
+                batalSelesai();
+            }, 10000);
+        }
+
+        function batalSelesai() {
+            document.getElementById('modal-konfirmasi').classList.add('hidden');
+            clearInterval(confirmCountdownInterval);
+            clearTimeout(confirmTimer);
+
+            setTimeout(() => {
+                masukFullscreen();
+            }, 100);
+        }
+
+        function kirimDataDenganRetry(payload, maxRetry = 3, retryDelay = 2000) {
+            return new Promise((resolve, reject) => {
+                let attempt = 0;
+
+                function cobaKirim() {
+                    attempt++;
+                    fetch(GOOGLE_SCRIPT_URL, {
+                        method: "POST",
+                        mode: "no-cors",
+                        headers: { 
+                            "Content-Type": "text/plain;charset=utf-8" 
+                        },
+                        body: JSON.stringify(payload)
+                    })
+                    .then(() => resolve(true))
+                    .catch(err => {
+                        if (attempt < maxRetry) {
+                            setTimeout(cobaKirim, retryDelay + Math.random() * 1000);
+                        } else {
+                            reject(err);
+                        }
+                    });
+                }
+                cobaKirim();
+            });
+        }
+
+        function submitUjian(isForced) {
+            if(!isExamActive) return;
+            isExamActive = false;
+
+            clearInterval(confirmCountdownInterval);
+            clearTimeout(confirmTimer);
+            document.getElementById('modal-konfirmasi').classList.add('hidden');
+
+            document.getElementById('btn-submit').disabled = true;
+
+            let benar = { C1: 0, C2: 0, C3: 0, C4: 0 };
+
+            selectedQuestions.forEach((q, idx) => {
+                if (userAnswers[idx] !== undefined && userAnswers[idx] === q.k) {
+                    benar[q.level]++;
+                }
+            });
+
+            let totalBenar = benar.C1 + benar.C2 + benar.C3 + benar.C4;
+            let skorAkhir = (totalBenar / 20) * 100;
+            let statusCurang = violations > 0 
+                ? (isForced ? `DISKUALIFIKASI - Pindah App (${violations}x)` : `Terdeteksi (${violations}x)`) 
+                : "Jujur";
+
+            let payload = {
+                nama: userData.nama,
+                kelas: userData.kelas,
+                deteksiCurang: statusCurang,
+                benarC1: benar.C1,
+                benarC2: benar.C2,
+                benarC3: benar.C3,
+                benarC4: benar.C4,
+                totalBenar: totalBenar,
+                skorAkhir: skorAkhir,
+                waktuKirim: new Date().toISOString()
+            };
+
+            document.getElementById('exam-page').classList.add('hidden');
+            document.getElementById('warning-bar').style.display = 'none';
+            document.getElementById('result-page').classList.remove('hidden');
+
+            document.getElementById('result-summary').innerHTML = `
+                <p><strong>Nama:</strong> ${userData.nama} | <strong>Kelas:</strong> ${userData.kelas}</p>
+                <p><strong>Status Kejujuran:</strong> <span style="color:${violations > 0 ? 'red':'green'}">${statusCurang}</span></p>
+                <hr>
+                <p>Benar C1: <strong>${benar.C1}/5</strong> | C2: <strong>${benar.C2}/5</strong> | C3: <strong>${benar.C3}/8</strong> | C4: <strong>${benar.C4}/2</strong></p>
+                <h3>Total Benar: ${totalBenar} / 20</h3>
+                <h2>Skor Akhir: ${skorAkhir}</h2>
+            `;
+
+            kirimDataDenganRetry(payload)
+                .then(() => {
+                    const statusElem = document.getElementById('sending-status');
+                    statusElem.style.background = "#d4edda";
+                    statusElem.style.color = "#155724";
+                    statusElem.innerText = "✅ Jawaban Berhasil Terkirim ke Google Sheets!";
+                    localStorage.removeItem(`ujian_${userData.nama}_${userData.kelas}`);
+                })
+                .catch(() => {
+                    const statusElem = document.getElementById('sending-status');
+                    statusElem.style.background = "#f8d7da";
+                    statusElem.style.color = "#721c24";
+                    statusElem.innerText = "❌ Gagal Mengirim Otomatis (Jaringan/Server Padat).";
+
+                    document.getElementById('backup-option').classList.remove('hidden');
+                    document.getElementById('backup-text').value = `HASIL UJIAN:\nNama: ${userData.nama}\nKelas: ${userData.kelas}\nSkor: ${skorAkhir}\nTotal Benar: ${totalBenar}/20\nStatus: ${statusCurang}`;
+                });
+        }
+    </script>
+</body>
+</html>
